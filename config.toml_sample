@@ -1,0 +1,6 @@
+interval_seconds = 300
+timeout_seconds = 5
+max_concurrency = 5
+
+[[targets]]
+url = ""
