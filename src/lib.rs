@@ -14,6 +14,13 @@ pub struct HttpChecker {
     semaphore: Arc<Semaphore>,
 }
 
+pub struct CheckResult {
+    pub url: String,
+    pub success: bool,
+    pub status_code: Option<u16>,
+    pub latency: Duration,
+}
+
 impl HttpChecker {
     pub fn new(config: &Config) -> anyhow::Result<Self> {
         let client = Client::builder()
