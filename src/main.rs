@@ -2,6 +2,7 @@ use ruliadema::checker::HttpChecker;
 use ruliadema::Config;
 use ruliadema::model::CheckHistory;
 use ruliadema::output::print_log;
+use std::fs::File;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -18,12 +19,18 @@ async fn main() -> anyhow::Result<()> {
     let checker = Arc::new(HttpChecker::new(config.timeout_seconds)?);
 
     // URLごとの履歴
-    let mut histories: HashMap<String, CheckHistory> = HashMap::new();
+    let mut histories: HashMap<String, CheckHistory> = 
+        if let Ok(file) = std::fs::File::open("status.json") {
+            // 前回デーモンが終了した時のデータを復元！
+            serde_json::from_reader(file).unwrap_or_default()
+        } else {
+            HashMap::new()
+        };
+
+    // config.toml に新しく追加されたURLがあれば、ここで history を作成してあげる
     for target in &config.targets {
-        histories.insert(
-            target.url.clone(),
-            CheckHistory::new(target.url.clone()),
-        );
+        histories.entry(target.url.clone())
+            .or_insert_with(|| CheckHistory::new(target.url.clone()));
     }
 
     // 並列数制限
@@ -49,18 +56,21 @@ async fn main() -> anyhow::Result<()> {
             }));
         }
 
-        // 結果を反映
         for handle in handles {
             let (url, result) = handle.await?;
 
             if let Some(history) = histories.get_mut(&url) {
-                // ★ 修正: diff の計算と50件の制限はすべて model.rs の push メソッドにお任せ！
                 history.push(result);
-
-                // ★ 修正: 今 push されたばかりの最新のデータを取得してログに出力
                 if let Some(latest_result) = history.results.back() {
                     print_log(&url, latest_result);
                 }
+            }
+        }
+
+        // ▼▼▼ ここを追加：毎回のチェックが終わったら JSON に上書き保存 ▼▼▼
+        if let Ok(file) = File::create("status.json") {
+            if let Err(e) = serde_json::to_writer_pretty(file, &histories) {
+                eprintln!("JSONの保存に失敗しました: {}", e);
             }
         }
     }

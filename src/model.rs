@@ -1,25 +1,26 @@
 use std::collections::VecDeque;
 use std::time::Duration;
 use chrono::{DateTime, Utc};
+use serde::{Serialize, Deserialize};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum CheckStatus {
     Up,
     Down,
     Error,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CheckResult {
     pub timestamp: DateTime<Utc>,
     pub status: CheckStatus,
     pub response_time: Option<Duration>,
-    pub diff_from_prev: Option<i128>, // ← ミリ秒差分
+    pub diff_from_prev: Option<i128>,
 }
 
 const MAX_HISTORY: usize = 50;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CheckHistory {
     pub url: String,
     pub results: VecDeque<CheckResult>,
