@@ -54,25 +54,14 @@ async fn main() -> anyhow::Result<()> {
             let (url, result) = handle.await?;
 
             if let Some(history) = histories.get_mut(&url) {
-                let mut result = result; // ★ ここで mut にする
+                // ★ 修正: diff の計算と50件の制限はすべて model.rs の push メソッドにお任せ！
+                history.push(result);
 
-                // ★★★ diff を計算する場所 ★★★
-                if let (Some(prev), Some(curr_rt)) = (history.results.back(), result.response_time){
-                    if let Some(prev_rt) = prev.response_time {
-                        let diff = curr_rt.as_millis() as i128 - prev_rt.as_millis() as i128;
-                        result.diff_from_prev = Some(diff);
-                    }
+                // ★ 修正: 今 push されたばかりの最新のデータを取得してログに出力
+                if let Some(latest_result) = history.results.back() {
+                    print_log(&url, latest_result);
                 }
-
-                // ★ 最後に push
-                history.results.push_back(result.clone());
-
-                // ★ ログ出力
-                print_log(&url, &result);
             }
-
-
         }
-
     }
 }
