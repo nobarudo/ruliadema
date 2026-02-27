@@ -62,7 +62,7 @@ fn main() -> anyhow::Result<()> {
                 // ==========================================
                 let content_chunks = Layout::default()
                     .direction(Direction::Horizontal)
-                    .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
+                    .constraints([Constraint::Percentage(35), Constraint::Percentage(65)])
                     .split(main_chunks[0]);
 
                 let left_chunks = Layout::default()
@@ -160,7 +160,7 @@ fn main() -> anyhow::Result<()> {
             let footer_text = if show_config {
                 " c/Esc: Back to Main   q: Quit "
             } else {
-                " ↑/↓: Select URL   c: Config   q: Quit "
+                " j/k or ↓/↑: Select URL   c: Config   q: Quit "
             };
             let footer = Paragraph::new(footer_text)
                 .style(Style::default().fg(Color::DarkGray));
@@ -189,7 +189,7 @@ fn main() -> anyhow::Result<()> {
                             show_config = false;
                         }
                     }
-                    KeyCode::Down => {
+                    KeyCode::Char('j') | KeyCode::Down => {
                         if !show_config { // 設定画面を開いている時はカーソルを動かさない
                             let i = match list_state.selected() {
                                 Some(i) => if i >= urls.len().saturating_sub(1) { 0 } else { i + 1 },
@@ -198,7 +198,7 @@ fn main() -> anyhow::Result<()> {
                             list_state.select(Some(i));
                         }
                     }
-                    KeyCode::Up => {
+                    KeyCode::Char('k') | KeyCode::Up => {
                         if !show_config {
                             let i = match list_state.selected() {
                                 Some(i) => if i == 0 { urls.len().saturating_sub(1) } else { i - 1 },
