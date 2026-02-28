@@ -1,6 +1,6 @@
-use std::time::{Duration, Instant};
 use chrono::Utc;
 use reqwest::Client;
+use std::time::{Duration, Instant};
 
 use crate::model::{CheckResult, CheckStatus};
 
@@ -34,6 +34,7 @@ impl HttpChecker {
                     status,
                     response_time: Some(start.elapsed()),
                     diff_from_prev: None,
+                    diff_from_acceptable: None, // ▼ 追加: 初期値はNoneにしておく
                 }
             }
             Err(_) => CheckResult {
@@ -41,6 +42,7 @@ impl HttpChecker {
                 status: CheckStatus::Error,
                 response_time: None,
                 diff_from_prev: None,
+                diff_from_acceptable: None, // ▼ 追加: エラー時も初期値はNone
             },
         }
     }

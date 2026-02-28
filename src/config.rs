@@ -1,6 +1,6 @@
+use anyhow::Result;
 use serde::Deserialize;
 use std::fs;
-use anyhow::Result;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -13,6 +13,13 @@ pub struct Config {
 #[derive(Debug, Deserialize)]
 pub struct Target {
     pub url: String,
+    #[serde(default = "default_latency")] // ← 設定がない場合はデフォルト値を使う
+    pub acceptable_latency_ms: u64,
+}
+
+// デフォルトの許容時間は1000ms（1秒）とする
+fn default_latency() -> u64 {
+    1000
 }
 
 impl Config {
