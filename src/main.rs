@@ -8,7 +8,6 @@ use std::sync::Arc;
 use tokio::sync::Semaphore;
 use tokio::time::{Duration, interval};
 
-// ▼ ログ保存用のパッケージを追加
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 
@@ -22,30 +21,25 @@ async fn main() -> anyhow::Result<()> {
     // checker 初期化
     let checker = Arc::new(HttpChecker::new(config.timeout_seconds)?);
 
-    // ▼ 状態の復元（前回終了時の status.json があれば読み込む）
+    // 状態の復元
     let mut histories: HashMap<String, CheckHistory> = if let Ok(file) = File::open("status.json") {
         serde_json::from_reader(file).unwrap_or_default()
     } else {
         HashMap::new()
     };
 
-    // 新規追加されたURLがあれば histories に登録
     for target in &config.targets {
         let history = histories
             .entry(target.url.clone())
             .or_insert_with(|| CheckHistory::new(target.url.clone(), target.acceptable_latency_ms));
-
-        // config.toml側で許容時間が変更された時のために、常に最新値で上書きする
         history.acceptable_latency_ms = target.acceptable_latency_ms;
     }
 
-    // 並列数制限
     let semaphore = Arc::new(Semaphore::new(config.max_concurrency));
     let mut ticker = interval(Duration::from_secs(config.interval_seconds));
 
     loop {
         ticker.tick().await;
-
         let mut handles = Vec::new();
 
         for history in histories.values_mut() {
@@ -65,41 +59,64 @@ async fn main() -> anyhow::Result<()> {
             let (url, result) = handle.await?;
 
             if let Some(history) = histories.get_mut(&url) {
+                // 判定用に許容時間を取得しておく
+                let acceptable_ms = history.acceptable_latency_ms;
+
                 history.push(result);
 
-                // 最新の結果を取得して処理する
                 if let Some(latest_result) = history.results.back() {
-                    // ① コンソールへの出力
+                    // コンソールへの出力
                     print_log(&url, latest_result);
 
-                    // ② 永久保存用ログ (ruliadema.log) への追記
+                    let rt_ms = latest_result
+                        .response_time
+                        .map(|d| d.as_millis() as u64)
+                        .unwrap_or(0);
+
+                    // 永久保存用ログ (ruliadema.log) への追記
                     if let Ok(mut log_file) = OpenOptions::new()
                         .create(true)
                         .append(true)
                         .open("ruliadema.log")
                     {
-                        // ログに残すための「純粋なミリ秒」を計算する
-                        let rt_ms = latest_result
-                            .response_time
-                            .map(|d| d.as_millis() as u64)
-                            .unwrap_or(0);
-
-                        // ▼ json! マクロの中に response_time_ms として直接追加！
                         let log_entry = serde_json::json!({
                             "url": url,
-                            "response_time_ms": rt_ms, // ← ここに純粋な数値が入る
+                            "response_time_ms": rt_ms,
                             "result": latest_result
                         });
-
                         if let Ok(json_line) = serde_json::to_string(&log_entry) {
                             let _ = writeln!(log_file, "{}", json_line);
                         }
                     }
+
+                    // タイムアウト(取得失敗) または レスポンスタイムが許容時間を超えた場合
+                    let is_error = latest_result.response_time.is_none();
+                    if is_error || rt_ms > acceptable_ms {
+                        if let Ok(mut breach_file) = OpenOptions::new()
+                            .create(true)
+                            .append(true)
+                            .open("breaches.json")
+                        {
+                            let breach_entry = serde_json::json!({
+                                "url": url,
+                                "response_time_ms": rt_ms,
+                                "acceptable_latency_ms": acceptable_ms,
+                                "diff_ms": if is_error { 0 } else { rt_ms.saturating_sub(acceptable_ms) },
+                                "is_error": is_error,
+                                "result": latest_result // タイムスタンプやステータスコードを含めるため
+                            });
+
+                            if let Ok(json_line) = serde_json::to_string(&breach_entry) {
+                                let _ = writeln!(breach_file, "{}", json_line);
+                            }
+                        }
+                    }
+                    // ▲▲ ここまで ▲▲
                 }
             }
         }
 
-        // ③ 最新状態のスナップショット (status.json) への上書き保存
+        // 最新状態のスナップショット保存
         if let Ok(file) = File::create("status.json") {
             if let Err(e) = serde_json::to_writer_pretty(file, &histories) {
                 eprintln!("JSONの保存に失敗しました: {}", e);
