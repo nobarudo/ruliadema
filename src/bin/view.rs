@@ -72,7 +72,7 @@ fn main() -> anyhow::Result<()> {
 
                 let left_chunks = Layout::default()
                     .direction(Direction::Vertical)
-                    .constraints([Constraint::Min(0), Constraint::Length(10)])
+                    .constraints([Constraint::Min(0), Constraint::Length(12)])
                     .split(content_chunks[0]);
 
                 let items: Vec<ListItem> = urls
@@ -128,9 +128,24 @@ fn main() -> anyhow::Result<()> {
                                 None => "-".to_string(),
                             };
 
+                            let mut last_breach_ts = "--".to_string();
+                            if let Ok(file) = File::open("breaches.json") {
+                                let reader = BufReader::new(file);
+                                for line in reader.lines().filter_map(|l| l.ok()) {
+                                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&line) {
+                                        // 該当URLのログが見つかるたびに上書きするので、最終的に「最後の日時」が残る
+                                        if v["url"].as_str() == Some(url.as_str()) {
+                                            if let Some(ts) = v["result"]["timestamp"].as_str() {
+                                                last_breach_ts = ts.to_string();
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
                             let detail_text = format!(
-                                " Target : {}\n\n Status        : {}\n Response time : {}\n\n Response diff : {}\n Limit         : {} ms\n Limit diff    : {}",
-                                url, status_str, rt_str, diff_str, history.acceptable_latency_ms, diff_acc_str
+                                " Target : {}\n\n Status        : {}\n Response time : {}\n\n Response diff : {}\n Limit         : {} ms\n Limit diff    : {}\n Last Breach   : {}",
+                                url, status_str, rt_str, diff_str, history.acceptable_latency_ms, diff_acc_str, last_breach_ts
                             );
                             let detail_para = Paragraph::new(detail_text)
                                 .block(Block::default().title(" Detail ").borders(Borders::ALL));
